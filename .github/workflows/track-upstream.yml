@@ -64,6 +64,14 @@ jobs:
           set -euo pipefail
           PREV=$(cat pack/upstream-tag.txt 2>/dev/null || echo none)
           echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+          # 是否已有该版本的补丁文件 —— 用它判断「有没有真正产出新东西」，
+          # 比对比 upstream-tag 更可靠（首次运行/重复触发都不会误判）
+          SAFE_TAG=$(echo "${{ steps.up.outputs.tag }}" | tr '/' '-')
+          if [ -f "patches/replayed-${SAFE_TAG}.patch" ]; then
+            echo "already_patched=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_patched=false" >> "$GITHUB_OUTPUT"
+          fi
           echo "prev=$PREV upstream=${{ steps.up.outputs.tag }}"
 
       - name: Semantic replay dry-run
@@ -115,7 +123,7 @@ jobs:
           fi
 
       - name: Create release
-        if: steps.replay.outputs.needs_attention == 'false' && steps.base.outputs.prev != steps.up.outputs.tag
+        if: steps.replay.outputs.needs_attention == 'false' && steps.base.outputs.already_patched == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
