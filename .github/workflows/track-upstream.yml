@@ -1,0 +1,153 @@
+name: Track upstream and replay
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: "上游 ref (tag/branch/sha), 留空用最新 release"
+        required: false
+        default: ""
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve upstream ref
+        id: up
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_REF: ${{ inputs.upstream_ref }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_REF:-}" ]; then
+            TAG="$INPUT_REF"
+          else
+            TAG=$(gh api repos/NousResearch/hermes-agent/releases/latest --jq '.tag_name' 2>/dev/null || true)
+            if [ -z "$TAG" ]; then
+              TAG=$(gh api repos/NousResearch/hermes-agent/tags --jq '.[0].name')
+            fi
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "upstream ref: $TAG"
+
+      - name: Fetch upstream i18n files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.up.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p upstream/web/src/i18n
+          ok=0
+          for f in en.ts zh.ts types.ts; do
+            if gh api "repos/NousResearch/hermes-agent/contents/web/src/i18n/$f?ref=$TAG" --jq '.content' 2>/dev/null | base64 -d > "upstream/web/src/i18n/$f" 2>/dev/null; then
+              if [ -s "upstream/web/src/i18n/$f" ]; then ok=$((ok+1)); fi
+            fi
+          done
+          echo "fetched $ok/3"
+          test "$ok" -ge 2
+          ls -la upstream/web/src/i18n/
+
+      - name: Record previous baseline
+        id: base
+        run: |
+          set -euo pipefail
+          PREV=$(cat pack/upstream-tag.txt 2>/dev/null || echo none)
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+          echo "prev=$PREV upstream=${{ steps.up.outputs.tag }}"
+
+      - name: Semantic replay dry-run
+        id: replay
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1 || true
+          # 必须锁 5.x：TypeScript 7.x 的包导出结构变了，createSourceFile 不再直接可用
+          npm install --no-save --no-audit --no-fund typescript@5.6.3 >/dev/null 2>&1
+          export HERMES_TYPESCRIPT="$PWD/node_modules/typescript"
+          export HERMES_DIR="$PWD/upstream"
+          python3 scripts/replay-zh.py upstream pack/semantic-pack.json --dry-run | tee replay-report.json
+          NEW=$(python3 -c "import json;print(json.load(open('replay-report.json'))['upstream_new_keys'])")
+          STALE=$(python3 -c "import json;print(json.load(open('replay-report.json'))['stale_keys'])")
+          echo "new_keys=$NEW" >> "$GITHUB_OUTPUT"
+          echo "stale_keys=$STALE" >> "$GITHUB_OUTPUT"
+          if [ "$NEW" -gt 30 ]; then
+            echo "needs_attention=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_attention=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "new=$NEW stale=$STALE"
+
+      - name: Replay and build patch
+        if: steps.replay.outputs.needs_attention == 'false'
+        run: |
+          set -euo pipefail
+          export HERMES_TYPESCRIPT="$PWD/node_modules/typescript"
+          export HERMES_DIR="$PWD/upstream"
+          cp upstream/web/src/i18n/zh.ts /tmp/zh-before.ts
+          python3 scripts/replay-zh.py upstream pack/semantic-pack.json | tail -5
+          OUT="patches/replayed-${{ steps.up.outputs.tag }}.patch"
+          diff -u /tmp/zh-before.ts upstream/web/src/i18n/zh.ts > "$OUT" || true
+          wc -l "$OUT"
+
+      - name: Commit update
+        if: steps.replay.outputs.needs_attention == 'false'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "${{ steps.up.outputs.tag }}" > pack/upstream-tag.txt
+          git add -A pack patches replay-report.json
+          if git diff --cached --quiet; then
+            echo "no change"
+          else
+            git commit -m "chore: track upstream ${{ steps.up.outputs.tag }} (new keys: ${{ steps.replay.outputs.new_keys }})"
+            git push
+          fi
+
+      - name: Create release
+        if: steps.replay.outputs.needs_attention == 'false' && steps.base.outputs.prev != steps.up.outputs.tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="zh-${{ steps.up.outputs.tag }}"
+          NOTES=$(printf 'Align to upstream %s\n\n- semantic replay passed: new keys %s, stale keys %s\n- patch: patches/replayed-%s.patch\n- install: ./install-zh.sh /path/to/hermes\n' "${{ steps.up.outputs.tag }}" "${{ steps.replay.outputs.new_keys }}" "${{ steps.replay.outputs.stale_keys }}" "${{ steps.up.outputs.tag }}")
+          gh release create "$TAG" --title "zh patch for Hermes ${{ steps.up.outputs.tag }}" --notes "$NOTES" patches/replayed-*.patch pack/semantic-pack.json || echo "release skipped"
+
+      - name: Open issue when manual translation needed
+        if: steps.replay.outputs.needs_attention == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TITLE="Upstream ${{ steps.up.outputs.tag }}: ${{ steps.replay.outputs.new_keys }} keys need translation"
+          if gh issue list --search "$TITLE" --json title --jq '.[].title' | grep -qF "$TITLE"; then
+            echo "issue exists"
+          else
+            BODY=$(printf 'Automatic tracking found too many new upstream keys.\n\n- upstream: %s\n- new keys: %s\n- stale keys: %s\n\nSee replay-report.json for details.' "${{ steps.up.outputs.tag }}" "${{ steps.replay.outputs.new_keys }}" "${{ steps.replay.outputs.stale_keys }}")
+            gh issue create --title "$TITLE" --body "$BODY"
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "## Upstream tracking"
+            echo ""
+            echo "| item | value |"
+            echo "|---|---|"
+            echo "| upstream | \`${{ steps.up.outputs.tag }}\` |"
+            echo "| previous | \`${{ steps.base.outputs.prev }}\` |"
+            echo "| new keys | ${{ steps.replay.outputs.new_keys }} |"
+            echo "| stale keys | ${{ steps.replay.outputs.stale_keys }} |"
+            echo "| needs attention | ${{ steps.replay.outputs.needs_attention }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
