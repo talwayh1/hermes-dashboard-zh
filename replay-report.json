@@ -1,0 +1,30 @@
+{
+  "version": {
+    "hermes_head": "e8639fd4312e5102d6f10c76b56406cb01c19092",
+    "hermes_version": "v0.22.5+canary.20261101T064348Z-70-ge8639fd4312",
+    "en_keys": 919,
+    "zh_keys": 919
+  },
+  "steps": [],
+  "upstream_en_keys": 760,
+  "pack_zh_keys": 919,
+  "upstream_new_keys": 3,
+  "upstream_new_sample": [
+    "pluginsPage.autoUpdate",
+    "pluginsPage.updateAll",
+    "pluginsPage.updatingAll"
+  ],
+  "stale_keys": 10,
+  "stale_sample": [
+    "app.multiplexReasonAutoMigrationOff",
+    "app.multiplexReasonOwnGateway",
+    "app.multiplexReasonSingleProfile",
+    "app.multiplexReasonStandalone",
+    "app.nav.channels",
+    "app.nav.files",
+    "app.nav.mcp",
+    "app.nav.pairing",
+    "app.nav.system",
+    "app.nav.webhooks"
+  ]
+}
