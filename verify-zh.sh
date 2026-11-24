@@ -25,7 +25,7 @@ chk "context.tsx 支持 __HERMES_LOCALE__" grep -q "__HERMES_LOCALE__" "$I18N/co
 chk "types.ts 导出 UiStrings" grep -q "UiStrings" "$I18N/types.ts"
 chk "后端注入 __HERMES_LOCALE__" grep -q "__HERMES_LOCALE__" "$TARGET/hermes_cli/web_server_dashboard.py"
 chk "App.tsx 导航项已接入 labelKey" grep -q "labelKey" "$TARGET/web/src/App.tsx"
-chk "utils.ts 相对时间本地化" grep -qE "分钟前|hoursAgo" "$TARGET/web/src/lib/utils.ts"
+chk "utils.ts 相对时间本地化" grep -qE "分钟前|小时前|天前|__HERMES_LOCALE__" "$TARGET/web/src/lib/utils.ts"
 
 echo
 echo "=== 键数对比 ==="

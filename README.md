@@ -9,7 +9,7 @@ Hermes Agent Web Dashboard 简体中文补丁 — 让内页 UI 不再回落英�
 | 范围 | 说明 |
 |---|---|
 | 语言包 | `zh.ts` 补齐至与 `en.ts` 同键数，`ui` 段新增 152 键 |
-| 内页组件 | 33 个文件、179 处硬编码英文接入 `t.ui.*` |
+| 内页组件 | 33 个文件、186 处文案接入 `t.ui.*` |
 | 默认语言 | 后端注入 `window.__HERMES_LOCALE__`，首屏即为中文（此前 `getInitialLocale()` 硬编码回落 `en`） |
 | 导航/标题 | `App.tsx` 6 个无 `labelKey` 的导航项补齐；路由标题映射补 9 条 |
 | 相对时间 | `timeAgo`/`isoTimeAgo` 输出「3 小时前」而非「3h ago」 |
