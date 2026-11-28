@@ -6,13 +6,25 @@
     "zh_keys": 919
   },
   "steps": [],
-  "upstream_en_keys": 760,
+  "upstream_en_keys": 784,
   "pack_zh_keys": 919,
-  "upstream_new_keys": 3,
+  "upstream_new_keys": 27,
   "upstream_new_sample": [
-    "pluginsPage.autoUpdate",
-    "pluginsPage.updateAll",
-    "pluginsPage.updatingAll"
+    "app.dashboardMovingBody",
+    "app.dashboardMovingLater",
+    "app.dashboardMovingMachineDetail",
+    "app.dashboardMovingMachineDown",
+    "app.dashboardMovingMachineNotAvailable",
+    "app.dashboardMovingMachineNotAvailableDetail",
+    "app.dashboardMovingMachineReady",
+    "app.dashboardMovingMachineStarting",
+    "app.dashboardMovingMachineTitle",
+    "app.dashboardMovingMeta",
+    "app.dashboardMovingNotice",
+    "app.dashboardMovingOpen",
+    "app.dashboardMovingSettingsDetail",
+    "app.dashboardMovingSettingsTitle",
+    "app.dashboardMovingTitle"
   ],
   "stale_keys": 10,
   "stale_sample": [
